@@ -1,6 +1,7 @@
 import requests,re
 from bs4 import BeautifulSoup
 from urllib import parse as urlDict
+from scraping import *
 
 def _parser_data(response):
     #aqui é uma classe do python que realiza o parser do html
