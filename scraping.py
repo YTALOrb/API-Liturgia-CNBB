@@ -1,77 +1,89 @@
 import requests
-from bs4 import BeautifulSoup
-from urllib import parse as urlDict
 
 
-URL = "https://liturgiadiaria.cnbb.org.br/app/user/user/UserView.php"
+API_URL = "https://api-liturgia-diaria.vercel.app/"
 
 
-def _parser_data(response):
-    soup = BeautifulSoup(response.text, "html.parser")
+def getReturnLiturgia(**kwargs):
+    """
+    Busca a liturgia diária através da API externa.
 
-    post = soup.find_all("div", class_="blog-post")
+    Sem parâmetros:
+        retorna a liturgia de hoje.
 
-    leitura = ""
+    Com parâmetros:
+        parametros={
+            "ano": 2026,
+            "mes": 8,
+            "dia": 29
+        }
+    """
 
-    for item in post:
-        leitura += item.get_text()
-
-    return [
-        texto.replace("\n", "").replace("\t", "")
-        for texto in leitura.split("\n\n\n\n\t\t\t\t\t\t\t\t")
-    ]
-
-
-def _fazer_requisicao(parametros=None):
-
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/151.0.0.0 Safari/537.36"
-        ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-        "Connection": "keep-alive",
-    }
+    parametros = kwargs.get("parametros")
 
     try:
-        if parametros:
-            url = URL + "?" + urlDict.urlencode(parametros)
-        else:
-            url = URL
 
-        response = requests.get(
-            url,
-            headers=headers,
-            timeout=30
-        )
+        # ---------------------------------------------------------
+        # Buscar uma data específica
+        # ---------------------------------------------------------
+        if parametros:
+
+            ano = int(parametros["ano"])
+            mes = int(parametros["mes"])
+            dia = int(parametros["dia"])
+
+            data = f"{ano:04d}-{mes:02d}-{dia:02d}"
+
+            response = requests.get(
+                API_URL,
+                params={
+                    "date": data
+                },
+                timeout=30
+            )
+
+        # ---------------------------------------------------------
+        # Buscar liturgia de hoje
+        # ---------------------------------------------------------
+        else:
+
+            response = requests.get(
+                API_URL,
+                timeout=30
+            )
 
         response.raise_for_status()
 
-        return response
+        dados = response.json()
 
-    except requests.exceptions.SSLError as e:
-        raise Exception(
-            "O servidor da CNBB recusou a conexão SSL. "
-            f"Detalhes: {str(e)}"
-        )
+        return dados
 
     except requests.exceptions.Timeout:
         raise Exception(
-            "O servidor da CNBB demorou muito para responder."
+            "A API de liturgia demorou muito para responder."
+        )
+
+    except requests.exceptions.ConnectionError as e:
+        raise Exception(
+            f"Não foi possível conectar à API de liturgia: {str(e)}"
+        )
+
+    except requests.exceptions.HTTPError as e:
+        raise Exception(
+            f"A API de liturgia retornou um erro HTTP: {str(e)}"
+        )
+
+    except requests.exceptions.JSONDecodeError:
+        raise Exception(
+            "A API de liturgia retornou uma resposta que não é JSON."
         )
 
     except requests.exceptions.RequestException as e:
         raise Exception(
-            f"Erro ao acessar a fonte da liturgia: {str(e)}"
+            f"Erro ao consultar a API de liturgia: {str(e)}"
         )
 
-
-def getReturnLiturgia(**kwargs):
-
-    parametros = kwargs.get("parametros")
-
-    response = _fazer_requisicao(parametros)
-
-    return _parser_data(response)
+    except Exception as e:
+        raise Exception(
+            f"Erro ao obter a liturgia: {str(e)}"
+        )
