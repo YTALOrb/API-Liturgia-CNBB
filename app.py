@@ -1,9 +1,22 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS          # <-- NOVO
 from scraping import getReturnLiturgia
 import os
 import traceback
 
 app = Flask(__name__)
+
+# =========================================================
+# CORS - libera o acesso para o app Flutter (Web, Android, iOS)
+# =========================================================
+# Sem isso, o navegador bloqueia a resposta e o Flutter Web
+# lanca: ClientException: Failed to fetch
+CORS(
+    app,
+    resources={r"/*": {"origins": "*"}},
+    methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Accept", "Origin"],
+)
 
 
 @app.route("/", methods=["GET"])
@@ -17,11 +30,24 @@ def home():
     })
 
 
-@app.route("/api/liturgia", methods=["GET", "POST"])
+# =========================================================
+# HEALTHCHECK - use este endpoint para manter o servico acordado
+# (ping a cada 10 min via cron-job.org / UptimeRobot)
+# =========================================================
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok"}), 200
+
+
+@app.route("/api/liturgia", methods=["GET", "POST", "OPTIONS"])
 def get_liturgia():
 
+    # Preflight do navegador: responde e sai.
+    if request.method == "OPTIONS":
+        return ("", 204)
+
     # =====================================================
-    # POST - data específica
+    # POST - data especifica
     # =====================================================
 
     if request.method == "POST":
