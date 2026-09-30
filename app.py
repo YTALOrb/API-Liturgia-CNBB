@@ -1,77 +1,188 @@
-from flask import Flask, request, jsonify
-from scraping import *
-import os
+import requests
 
-app = Flask(__name__)
 
-jsontypeerror = {
-    "dados": [
-        {
-            "Message": "Invalid content-type. Must be application/json."
+# =============================================================
+# CONFIGURAÇÃO
+# =============================================================
+
+API_URL = "https://api-liturgia-diaria.vercel.app/"
+
+TIMEOUT = 30
+
+
+# =============================================================
+# FUNÇÃO PRINCIPAL
+# =============================================================
+
+def getReturnLiturgia(**kwargs):
+
+    """
+    Busca a liturgia através da API externa.
+
+    Sem parâmetros:
+        Busca a liturgia de hoje.
+
+    Com parâmetros:
+
+        parametros={
+            "ano": 2026,
+            "mes": 9,
+            "dia": 30
         }
-    ]
-}
 
+    """
 
-@app.route("/api/liturgia", methods=["GET", "POST"])
-def getLiturgia():
+    parametros = kwargs.get("parametros")
 
-    # POST: buscar liturgia de uma data específica
-    if request.method == "POST":
+    try:
 
-        if request.content_type != "application/json":
-            return jsonify(jsontypeerror), 400
+        # =====================================================
+        # DATA ESPECÍFICA
+        # =====================================================
 
-        try:
-            content = request.get_json()
+        if parametros:
 
-            ano = int(content["ano"])
-            mes = int(content["mes"])
-            dia = int(content["dia"])
+            ano = int(parametros["ano"])
+            mes = int(parametros["mes"])
+            dia = int(parametros["dia"])
 
-        except (TypeError, ValueError, KeyError):
-            return jsonify({
-                "erro": "Envie ano, mes e dia corretamente."
-            }), 400
+            data = f"{ano:04d}-{mes:02d}-{dia:02d}"
 
-        try:
-            resultado = getReturnLiturgia(
-                parametros={
-                    "ano": ano,
-                    "mes": mes,
-                    "dia": dia
-                }
+            print(
+                f"[SCRAPING] Buscando liturgia da data: {data}"
             )
 
-            return jsonify({
-                "Liturgia": resultado
-            })
+            response = requests.get(
+                API_URL,
+                params={
+                    "date": data
+                },
+                timeout=TIMEOUT
+            )
 
-        except Exception as e:
-            return jsonify({
-                "erro": "Erro ao buscar a liturgia.",
-                "detalhes": str(e)
-            }), 500
+        # =====================================================
+        # LITURGIA DE HOJE
+        # =====================================================
 
-    # GET: buscar liturgia do dia
-    try:
-        resultado = getReturnLiturgia()
+        else:
 
-        return jsonify({
-            "Liturgia": resultado
-        })
+            print(
+                "[SCRAPING] Buscando liturgia de hoje..."
+            )
+
+            response = requests.get(
+                API_URL,
+                timeout=TIMEOUT
+            )
+
+        # =====================================================
+        # INFORMAÇÕES DA RESPOSTA
+        # =====================================================
+
+        print(
+            f"[SCRAPING] Status HTTP: {response.status_code}"
+        )
+
+        print(
+            f"[SCRAPING] URL final: {response.url}"
+        )
+
+        print(
+            f"[SCRAPING] Content-Type: "
+            f"{response.headers.get('Content-Type')}"
+        )
+
+        # =====================================================
+        # ERRO HTTP
+        # =====================================================
+
+        if response.status_code != 200:
+
+            resposta = response.text[:1000]
+
+            print(
+                "[SCRAPING] API externa retornou erro:"
+            )
+
+            print(resposta)
+
+            raise Exception(
+                f"API externa retornou HTTP "
+                f"{response.status_code}. "
+                f"Resposta: {resposta}"
+            )
+
+        # =====================================================
+        # CONVERTER PARA JSON
+        # =====================================================
+
+        try:
+
+            dados = response.json()
+
+        except ValueError:
+
+            resposta = response.text[:1000]
+
+            print(
+                "[SCRAPING] Resposta não é JSON:"
+            )
+
+            print(resposta)
+
+            raise Exception(
+                "A API externa não retornou JSON. "
+                f"Resposta: {resposta}"
+            )
+
+        # =====================================================
+        # SUCESSO
+        # =====================================================
+
+        print(
+            "[SCRAPING] Liturgia recebida com sucesso."
+        )
+
+        return dados
+
+    # =========================================================
+    # TIMEOUT
+    # =========================================================
+
+    except requests.exceptions.Timeout:
+
+        raise Exception(
+            "A API externa demorou mais de "
+            f"{TIMEOUT} segundos para responder."
+        )
+
+    # =========================================================
+    # ERRO DE CONEXÃO
+    # =========================================================
+
+    except requests.exceptions.ConnectionError as e:
+
+        raise Exception(
+            "Não foi possível conectar à API externa. "
+            f"Detalhes: {e}"
+        )
+
+    # =========================================================
+    # ERRO HTTP
+    # =========================================================
+
+    except requests.exceptions.HTTPError as e:
+
+        raise Exception(
+            f"Erro HTTP ao consultar a API externa: {e}"
+        )
+
+    # =========================================================
+    # OUTROS ERROS
+    # =========================================================
 
     except Exception as e:
-        return jsonify({
-            "erro": "Erro ao buscar a liturgia.",
-            "detalhes": str(e)
-        }), 500
 
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-
-    app.run(
-        host="0.0.0.0",
-        port=port
-    )
+        raise Exception(
+            f"Erro ao obter a liturgia: {e}"
+        )
